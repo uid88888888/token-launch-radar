@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Launch Radar — pre-token protocols ranked by implied value</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="hero">
+  <p class="eyebrow">Token Launch Radar &middot; model radar-2 &middot; snapshot 2026-11-14</p>
+  <h1>Token Launch Radar</h1>
+  <p class="lede">Which protocol's token would be worth the most if it launched tomorrow &mdash; and what to do to farm it first. Every protocol below <strong>records no token</strong> in the snapshot: no market cap, no CoinGecko id, no symbol. That is the record, never proof it has none.</p>
+  <div class="stats" id="stats" aria-label="Coverage"></div>
+</header>
+
+<main>
+  <section class="card method" id="method">
+    <h2>How this radar scores</h2>
+    <p class="formula">implied value = 1,000,000 &times; (TVL &divide; 1,000,000)<sup>0.8</sup> &times; growth &times; maturity &times; breadth</p>
+    <ul class="factors">
+      <li><strong>Size, with diminishing returns.</strong> A token&rsquo;s value does not scale linearly with TVL: the biggest pools compress toward the pack, so TVL enters to the power 0.8.</li>
+      <li><strong>Growth.</strong> 7-day TVL change, clamped to &minus;50% &hellip; +150%, weighted 0.6. A shrinking pool is marked down, a surging one marked up, never without bound.</li>
+      <li><strong>Maturity.</strong> 0.55 + 0.45 &times; (1 &minus; e<sup>&minus;age/540</sup>). A protocol that held big TVL for years with no token carries a larger pent-up launch value; the factor saturates.</li>
+      <li><strong>Breadth.</strong> 1 + 0.03 per chain, up to 4 chains. A launch that can reach holders on more chains is worth more.</li>
+    </ul>
+    <p class="note">No name is ever special-cased: the same function scores every row. Wrapped, staked and bridged products of tokens that already trade are excluded outright &mdash; WBTC is Bitcoin on Ethereum, not a protocol still waiting on a launch of its own. Protocols whose token already trades are kept apart in <em>Already trading</em>, shown at the market&rsquo;s own market cap, never at a modelled value.</p>
+  </section>
+
+  <section class="controls" aria-label="Board controls">
+    <label class="ctl search">Search <input id="q" type="search" placeholder="Name or slug&hellip;" autocomplete="off"></label>
+    <label class="ctl">Category <select id="cat"><option value="">All categories</option></select></label>
+    <label class="ctl">Chain <select id="chain"><option value="">All chains</option></select></label>
+    <label class="ctl check"><input id="watchOnly" type="checkbox"> Watchlist only</label>
+    <label class="ctl">Sort by
+      <select id="sort">
+        <option value="value">Implied value</option>
+        <option value="tvl">TVL</option>
+        <option value="growth">7-day change</option>
+        <option value="age">Age</option>
+        <option value="name">Name</option>
+      </select>
+    </label>
+  </section>
+
+  <nav class="tabs" aria-label="Views">
+    <button id="tabBoard" class="tab active" type="button">Ranked board</button>
+    <button id="tabLive" class="tab" type="button">Already trading</button>
+  </nav>
+
+  <section id="detail" class="card detail" hidden aria-label="Protocol detail"></section>
+
+  <section id="boardView" aria-label="Ranked board">
+    <p class="count" id="count"></p>
+    <div class="tablewrap">
+      <table id="board">
+        <thead><tr>
+          <th data-sort="value" class="num">#</th>
+          <th data-sort="name">Protocol</th>
+          <th>Category</th>
+          <th>Chains</th>
+          <th data-sort="tvl" class="num">TVL</th>
+          <th data-sort="growth" class="num">7d</th>
+          <th data-sort="age" class="num">Age</th>
+          <th data-sort="value" class="num">Implied value</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="hint">Click any row for its detail view: the model&rsquo;s breakdown and a six-step farm plan with costs and times.</p>
+  </section>
+
+  <section id="liveView" hidden aria-label="Already trading">
+    <p class="count">These protocols already have a token that trades. Their value is the market&rsquo;s own market cap &mdash; not a modelled implied value &mdash; so they never appear on the ranked board.</p>
+    <div class="tablewrap">
+      <table id="live">
+        <thead><tr>
+          <th>Protocol</th><th>Category</th><th class="num">TVL</th><th class="num">Market cap</th><th class="num">7d</th>
+        </tr></thead>
+        <tbody id="liveRows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <p>Data: DefiLlama public API, fetched 2026-11-14 (snapshot as-of <span id="asOf"></span>). Floor for the watchlist: $50,000,000 TVL. A protocol &ldquo;records no token&rdquo; when the snapshot carries no market cap, no CoinGecko id and no symbol for it.</p>
+  <p>Implied values are this radar&rsquo;s own claim about what a token would be worth if the protocol&rsquo;s record stayed as it is. They predict neither whether nor when a token is issued. Farm steps are a starting plan, not financial advice; never pay to claim an airdrop.</p>
+</footer>
+<script src="../data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
