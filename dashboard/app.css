@@ -77,6 +77,22 @@ tbody tr.selected { background: #16263f; box-shadow: inset 3px 0 0 var(--accent)
 .bar { height: 5px; background: var(--line); border-radius: 3px; margin-top: 4px; min-width: 70px; }
 .bar i { display: block; height: 5px; background: linear-gradient(90deg, var(--accent), var(--amber)); border-radius: 3px; }
 .hint { color: var(--faint); font-size: 13px; }
+.calib h2 { margin: 0 0 6px; font-size: 18px; }
+.chartcap { color: var(--muted); font-size: 13px; margin: 10px 0 2px; }
+.chartcap .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 4px 0 10px; vertical-align: middle; }
+.chartcap .dot.board { background: var(--accent); }
+.chartcap .dot.live { background: var(--amber); }
+#chart svg { width: 100%; height: auto; display: block; }
+#chart .grid { stroke: var(--line); stroke-width: 1; }
+#chart .axis { fill: var(--faint); font-size: 11px; text-anchor: middle; }
+#chart .axis.r { text-anchor: end; }
+#chart .board-dot { fill: var(--accent); opacity: .8; }
+#chart .live-dot { fill: var(--amber); opacity: .55; }
+.bands { width: 100%; margin: 10px 0 4px; }
+.bands td, .bands th { padding: 6px 10px; }
+.comps { width: 100%; margin: 6px 0 14px; }
+.comps td { padding: 7px 10px; border-bottom: 1px solid var(--line); }
+.comps tr.self td { font-weight: 700; border-top: 2px solid var(--accent); }
 .detail h2 { font-size: 22px; }
 .detail .sub { color: var(--muted); margin: -4px 0 12px; }
 .kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 12px 0; }

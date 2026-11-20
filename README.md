@@ -8,7 +8,7 @@ Token Launch Radar — ranks pre-token protocols by implied launch value (make.f
 
 ## How it ranks
 
-Model `radar-2` scores every pre-token protocol in the sealed DeFiLlama snapshot by implied launch value:
+Model `radar-3` scores every pre-token protocol in the sealed DeFiLlama snapshot by implied launch value:
 
 ```
 implied value = 1,000,000 × (TVL ÷ 1,000,000)^0.8 × growth × maturity × breadth
@@ -21,7 +21,9 @@ implied value = 1,000,000 × (TVL ÷ 1,000,000)^0.8 × growth × maturity × bre
 
 Wrapped, staked, staked-restaked and bridged products of tokens that already trade are excluded outright — a protocol still waiting on a launch of its own is what this radar is for. Protocols whose token already trades are kept apart in an *Already trading* view, shown at the market's own market cap, never at a modelled value.
 
-The dashboard shows the ranked board (198 protocols, all 40 watchlist protocols covered), a detail view per protocol with a model breakdown and a 6-step farm plan, and search / category / chain filters.
+**Checked against the market, not just asserted.** Every protocol's detail view shows its three nearest live-token comparables — same category first, then nearest by TVL — with their market cap and market-cap-to-TVL, so each implied value can be judged against the market instead of taken on trust. A calibration section shows the live cross-section itself: across the snapshot's 105 live-token protocols the median market cap is 0.20× TVL, falling from 0.65× at $1–10M of TVL to 0.018× above $1B, which is why the size exponent is 0.8 rather than 1. Implied values sit above those realized medians on purpose — they are launch valuations, priced on the expectation that the protocol is still growing, while the realized median mixes thriving tokens with ones that launched years ago and faded. A log-log fit of live market caps on TVL was tried and rejected as a calibrator: it gives an exponent of 0.52 but with a median log error above 1.2, because the live cross-section mixes thriving tokens, dead tokens and bridges — fitting it would be fitting noise.
+
+The dashboard shows the ranked board (198 protocols, all 40 watchlist protocols covered), a detail view per protocol with a model breakdown, live comparables and a 6-step farm plan, and search / category / chain filters.
 
 ## Run it
 

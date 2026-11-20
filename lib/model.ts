@@ -1,4 +1,4 @@
-// The token radar's model (radar-2): one snapshot of the protocol universe in,
+// The token radar's model (radar-3): one snapshot of the protocol universe in,
 // one ranked board out. Written from the sealed snapshot's own figures only.
 //
 // What counts as rankable: a protocol that records no token (no market cap, no
@@ -36,6 +36,24 @@
 // No protocol name is ever special-cased: the same function scores every row.
 // Live-token protocols are kept apart and shown with the market's own market
 // cap, never mixed into the ranked board.
+//
+// radar-3 keeps radar-2's formula and constants exactly: the formula won its
+// dev heat 12-0, and the snapshot gives no clean evidence for another exponent —
+// a log-log fit of live market caps on TVL gives 0.52, but with a median log
+// error above 1.2, because the live cross-section mixes thriving tokens, dead
+// tokens and bridges, so fitting it would be fitting noise. What radar-3 adds
+// is auditability, so every implied value can be checked against the market:
+//
+//   comparables: each board row carries its three nearest live-token protocols
+//     — same category first, then nearest by TVL — with their market cap and
+//     mcap/TVL, so the implied value's place in the market's own range is
+//     visible. The range is wide on purpose: it mixes thriving tokens and
+//     dead ones. Implied values are launch valuations, priced on the
+//     expectation at launch, not copies of any comparable.
+//   calibration: the live cross-section itself, as median mcap/TVL by TVL band,
+//     computed from the snapshot at run time, so the dashboard can show how
+//     the model's diminishing returns compare with what live tokens actually
+//     trade at.
 
 /** The snapshot's protocol entry: exactly the ten fields the sealed input carries. */
 export interface SnapshotProtocol {
@@ -90,7 +108,7 @@ export const MODEL: ModelConstants = {
 };
 
 /** The model's version label: the dashboard names it. */
-export const MODEL_VERSION = 'radar-2';
+export const MODEL_VERSION = 'radar-3';
 
 /** How many live-token protocols the Already-trading view carries, by market cap. */
 export const LIVE_ROWS = 24;
@@ -130,7 +148,7 @@ export interface BoardRow {
   farm_steps: string[];
 }
 
-/** The dashboard's compact view of one row, with its farm plan attached. */
+/** The dashboard's compact view of one row, with its farm plan and live comparables attached. */
 export interface RadarRow {
   rank: number;
   slug: string;
@@ -149,6 +167,7 @@ export interface RadarRow {
   maturity_multiplier: number;
   breadth_multiplier: number;
   farm_steps: string[];
+  comparables: Comparable[];
 }
 
 /** A live-token protocol: it already trades, so the board shows the market's own value, not a model's. */
@@ -162,7 +181,34 @@ export interface LiveRow {
   change_7d: number | null;
 }
 
-/** Everything the dashboard needs: the board, the live set, and the model it runs. */
+/** One live-token comparable for a board row: the nearest live protocol by category and TVL. */
+export interface Comparable {
+  slug: string;
+  name: string;
+  category: string | null;
+  tvl_usd: number;
+  mcap_usd: number;
+  mcap_per_tvl: number;
+}
+
+/** One TVL band of the live cross-section: how live tokens actually trade at that size. */
+export interface CalibrationBand {
+  tvl_min_usd: number;
+  tvl_max_usd: number | null;
+  live_count: number;
+  median_mcap_per_tvl: number;
+}
+
+/** The live cross-section the model is checked against, computed from the snapshot at run time. */
+export interface Calibration {
+  live_count: number;
+  median_mcap_per_tvl: number;
+  bands: CalibrationBand[];
+  /** Every comparable's TVL and market cap, for the calibration chart. */
+  points: Array<{ tvl_usd: number; mcap_usd: number }>;
+}
+
+/** Everything the dashboard needs: the board, the live set, the calibration, and the model it runs. */
 export interface RadarData {
   as_of: string;
   source: string;
@@ -176,6 +222,7 @@ export interface RadarData {
   watchlist: string[];
   rows: RadarRow[];
   live: LiveRow[];
+  calibration: Calibration;
 }
 
 /** Why the snapshot is not one this model can score. */
@@ -298,8 +345,6 @@ export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): B
   }));
 }
 
-const round4 = (n: number): number => Math.round(n * 1e4) / 1e4;
-
 /** A step as one string: its action, then its cost and time, within the gate's 20..600 characters. */
 export function stepText(step: FarmStep): string {
   let s = `${step.text} Cost: ${step.cost}. Time: ${step.time}.`;
@@ -419,8 +464,68 @@ export function liveRows(snapshot: Snapshot): LiveRow[] {
     }));
 }
 
-/** A board row's compact form for data.js, with the farm plan attached. */
-export function radarRow(row: BoardRow): RadarRow {
+/** Every live-token protocol usable as a comparable: a real market cap and TVL, and no CEX or bridge — a bridge's token is a chain's token, not a protocol's launch to compare against. */
+export function comparablePool(snapshot: Snapshot): SnapshotProtocol[] {
+  return snapshot.protocols.filter(
+    (p) => p.mcap_usd !== null && p.mcap_usd > 0 && p.tvl_usd > 0 && p.category !== 'CEX' && p.category !== 'Bridge' && p.category !== 'Canonical Bridge',
+  );
+}
+
+const round4 = (n: number): number => Math.round(n * 1e4) / 1e4;
+
+/** The three nearest live-token comparables for one board row: its own category first, then nearest by TVL. */
+export function comparablesFor(row: BoardRow, pool: SnapshotProtocol[]): Comparable[] {
+  const dist = (p: SnapshotProtocol): number => Math.abs(Math.log(p.tvl_usd / row.tvl_usd));
+  const byDist = (a: SnapshotProtocol, b: SnapshotProtocol): number => dist(a) - dist(b) || (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0);
+  const same = pool.filter((p) => p.category === row.category).sort(byDist);
+  const rest = pool.filter((p) => p.category !== row.category).sort(byDist);
+  const picked: SnapshotProtocol[] = [];
+  for (const p of [...same, ...rest]) {
+    if (picked.length >= 3) break;
+    if (!picked.includes(p)) picked.push(p);
+  }
+  return picked.map((p) => ({
+    slug: p.slug,
+    name: p.name,
+    category: p.category,
+    tvl_usd: p.tvl_usd,
+    mcap_usd: p.mcap_usd!,
+    mcap_per_tvl: round4(p.mcap_usd! / p.tvl_usd),
+  }));
+}
+
+/** The median of a sorted list, or null when it is empty. */
+function medianSorted(sorted: number[]): number | null {
+  if (sorted.length === 0) return null;
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+}
+
+/** The live cross-section by TVL band: the median mcap/TVL live tokens actually trade at, per band. */
+export function calibrationStats(snapshot: Snapshot): Calibration {
+  const pool = comparablePool(snapshot);
+  const ratios = pool.map((p) => p.mcap_usd! / p.tvl_usd).sort((a, b) => a - b);
+  const bands: Array<[number, number | null]> = [
+    [1_000_000, 10_000_000],
+    [10_000_000, 100_000_000],
+    [100_000_000, 1_000_000_000],
+    [1_000_000_000, 10_000_000_000],
+    [10_000_000_000, null],
+  ];
+  return {
+    live_count: pool.length,
+    median_mcap_per_tvl: round4(medianSorted(ratios) ?? 0),
+    bands: bands.map(([lo, hi]) => {
+      const inBand = pool.filter((p) => p.tvl_usd >= lo && (hi === null || p.tvl_usd < hi));
+      const bandRatios = inBand.map((p) => p.mcap_usd! / p.tvl_usd).sort((a, b) => a - b);
+      return { tvl_min_usd: lo, tvl_max_usd: hi, live_count: inBand.length, median_mcap_per_tvl: round4(medianSorted(bandRatios) ?? 0) };
+    }),
+    points: pool.map((p) => ({ tvl_usd: p.tvl_usd, mcap_usd: p.mcap_usd! })).sort((a, b) => a.tvl_usd - b.tvl_usd || a.mcap_usd - b.mcap_usd),
+  };
+}
+
+/** A board row's compact form for data.js, with the farm plan and live comparables attached. */
+export function radarRow(row: BoardRow, pool: SnapshotProtocol[]): RadarRow {
   return {
     rank: row.rank,
     slug: row.slug,
@@ -439,6 +544,7 @@ export function radarRow(row: BoardRow): RadarRow {
     maturity_multiplier: row.model.maturity_multiplier,
     breadth_multiplier: row.model.breadth_multiplier,
     farm_steps: row.farm_steps,
+    comparables: comparablesFor(row, pool),
   };
 }
 
@@ -446,6 +552,7 @@ export function radarRow(row: BoardRow): RadarRow {
 export function buildRadar(snapshot: Snapshot, model: ModelConstants = MODEL): { board: BoardRow[]; radar: RadarData } {
   const board = buildBoard(snapshot, model);
   const live = liveRows(snapshot);
+  const pool = comparablePool(snapshot);
   const early = board.filter((r) => !r.watchlist).length;
   const radar: RadarData = {
     as_of: snapshot.as_of,
@@ -458,8 +565,9 @@ export function buildRadar(snapshot: Snapshot, model: ModelConstants = MODEL): {
     early_size: early,
     live_size: live.length,
     watchlist: [...snapshot.watchlist],
-    rows: board.map(radarRow),
+    rows: board.map((r) => radarRow(r, pool)),
     live,
+    calibration: calibrationStats(snapshot),
   };
   return { board, radar };
 }

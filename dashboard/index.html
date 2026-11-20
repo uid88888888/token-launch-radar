@@ -8,7 +8,7 @@
 </head>
 <body>
 <header class="hero">
-  <p class="eyebrow">Token Launch Radar &middot; model radar-2 &middot; snapshot 2026-11-14</p>
+  <p class="eyebrow">Token Launch Radar &middot; model radar-3 &middot; snapshot 2026-11-14</p>
   <h1>Token Launch Radar</h1>
   <p class="lede">Which protocol's token would be worth the most if it launched tomorrow &mdash; and what to do to farm it first. Every protocol below <strong>records no token</strong> in the snapshot: no market cap, no CoinGecko id, no symbol. That is the record, never proof it has none.</p>
   <div class="stats" id="stats" aria-label="Coverage"></div>
@@ -25,6 +25,13 @@
       <li><strong>Breadth.</strong> 1 + 0.03 per chain, up to 4 chains. A launch that can reach holders on more chains is worth more.</li>
     </ul>
     <p class="note">No name is ever special-cased: the same function scores every row. Wrapped, staked and bridged products of tokens that already trade are excluded outright &mdash; WBTC is Bitcoin on Ethereum, not a protocol still waiting on a launch of its own. Protocols whose token already trades are kept apart in <em>Already trading</em>, shown at the market&rsquo;s own market cap, never at a modelled value.</p>
+  </section>
+
+  <section class="card calib" id="calib">
+    <h2>How the numbers were checked</h2>
+    <p id="calibText" class="note"></p>
+    <div id="chart" aria-label="Implied value against TVL, board rows against live tokens"></div>
+    <table class="bands" id="bands" aria-label="Live market cap per TVL by size band"></table>
   </section>
 
   <section class="controls" aria-label="Board controls">

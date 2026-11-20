@@ -36,6 +36,50 @@
   document.querySelector('#tabBoard').textContent = 'Ranked board (' + rows.length + ')';
   document.querySelector('#tabLive').textContent = 'Already trading (' + live.length + ')';
 
+  // ---- calibration: the live cross-section, and the chart that plots it ----
+  function renderCalibration() {
+    var c = R.calibration;
+    if (!c) return;
+    var b = c.bands;
+    $('calibText').innerHTML = 'Across ' + c.live_count + ' live-token protocols the median market cap is <b>' + c.median_mcap_per_tvl + '&times; TVL</b>, falling from ' + b[0].median_mcap_per_tvl + '&times; at $1–10M of TVL to ' + b[3].median_mcap_per_tvl + '&times; above $1B — the market discounts size, which is why the model raises TVL to the power 0.8 instead of 1. The board&rsquo;s implied values sit above those medians: a launch is priced on the expectation that the protocol is still growing, while the realized median mixes thriving tokens with ones that launched years ago and faded. The chart plots both clouds, so each number can be judged against the market instead of taken on trust.';
+    $('bands').innerHTML = '<thead><tr><th>TVL band</th><th class="num">Live tokens</th><th class="num">Median market cap / TVL</th></tr></thead><tbody>' + b.map(function (band) {
+      var label = band.tvl_max_usd == null ? money(band.tvl_min_usd) + '+' : money(band.tvl_min_usd) + ' – ' + money(band.tvl_max_usd);
+      return '<tr><td>' + label + '</td><td class="num">' + band.live_count + '</td><td class="num">' + band.median_mcap_per_tvl + '&times;</td></tr>';
+    }).join('') + '</tbody>';
+    var W = 1080, H = 300, padL = 56, padR = 14, padT = 12, padB = 32;
+    var x0 = 6, x1 = 10, y0 = 5, y1 = 10;
+    function X(v) {
+      var x = padL + (Math.log10(Math.max(v, 1)) - x0) / (x1 - x0) * (W - padL - padR);
+      return Math.min(Math.max(x, padL), W - padR);
+    }
+    function Y(v) {
+      var y = padT + (y1 - Math.log10(Math.max(v, 1))) / (y1 - y0) * (H - padT - padB);
+      return Math.min(Math.max(y, padT), H - padB);
+    }
+    function xLabel(e) { return e >= 9 ? Math.pow(10, e - 9) + 'B' : Math.pow(10, e - 6) + 'M'; }
+    function yLabel(f) { return f >= 9 ? Math.pow(10, f - 9) + 'B' : f >= 6 ? Math.pow(10, f - 6) + 'M' : Math.pow(10, f - 3) + 'K'; }
+    var s = '<p class="chartcap"><span class="dot board"></span>Board rows — implied value &nbsp;<span class="dot live"></span>Live tokens — market cap &nbsp;·&nbsp; log scale, dollars</p>';
+    s += '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Scatter of implied value against TVL">';
+    var e, f;
+    for (e = 6; e <= 10; e++) {
+      s += '<line x1="' + X(Math.pow(10, e)).toFixed(1) + '" y1="' + padT + '" x2="' + X(Math.pow(10, e)).toFixed(1) + '" y2="' + (H - padB) + '" class="grid"/>';
+      s += '<text x="' + X(Math.pow(10, e)).toFixed(1) + '" y="' + (H - 12) + '" class="axis">$' + xLabel(e) + '</text>';
+    }
+    for (f = 5; f <= 10; f++) {
+      s += '<line x1="' + padL + '" y1="' + Y(Math.pow(10, f)).toFixed(1) + '" x2="' + (W - padR) + '" y2="' + Y(Math.pow(10, f)).toFixed(1) + '" class="grid"/>';
+      s += '<text x="' + (padL - 6) + '" y="' + (Y(Math.pow(10, f)) + 4).toFixed(1) + '" class="axis r">$' + yLabel(f) + '</text>';
+    }
+    c.points.forEach(function (p) {
+      s += '<circle cx="' + X(p.tvl_usd).toFixed(1) + '" cy="' + Y(p.mcap_usd).toFixed(1) + '" r="2.6" class="live-dot"/>';
+    });
+    rows.forEach(function (r) {
+      s += '<circle cx="' + X(r.tvl_usd).toFixed(1) + '" cy="' + Y(r.implied_value_usd).toFixed(1) + '" r="3" class="board-dot"/>';
+    });
+    s += '</svg>';
+    $('chart').innerHTML = s;
+  }
+  renderCalibration();
+
   // ---- filter options ----
   var cats = [], chains = [];
   rows.forEach(function (r) {
@@ -132,6 +176,17 @@
       '<tr class="total"><td>Implied value</td><td>' + money(r.implied_value_usd) + '</td></tr>' +
       '</tbody></table>' +
       '<p class="why">' + why + '</p>' +
+      '<h3>Live comparables</h3>' +
+      '<p class="note">The nearest live-token protocols in this category by TVL, with what their tokens actually trade at. The range is wide — it mixes thriving tokens and dead ones — so the implied value is a launch valuation, not a copy of any comparable.</p>' +
+      '<table class="comps"><thead><tr><th>Protocol</th><th>Category</th><th class="num">TVL</th><th class="num">Market cap</th><th class="num">Mcap / TVL</th></tr></thead><tbody>' +
+      '<tr class="self"><td><span class="name">' + esc(r.name) + '</span> <span class="slug">(implied)</span></td><td class="cat">' + esc(r.category || '—') + '</td><td class="num">' + money(r.tvl_usd) + '</td><td class="num">' + money(r.implied_value_usd) + '</td><td class="num">' + (r.implied_value_usd / r.tvl_usd).toFixed(3) + '&times;</td></tr>' +
+      (r.comparables || []).map(function (c) {
+        return '<tr><td><span class="name">' + esc(c.name) + '</span><br><span class="slug">' + esc(c.slug) + '</span></td>' +
+          '<td class="cat">' + esc(c.category || '—') + '</td>' +
+          '<td class="num">' + money(c.tvl_usd) + '</td>' +
+          '<td class="num">' + money(c.mcap_usd) + '</td>' +
+          '<td class="num">' + c.mcap_per_tvl + '&times;</td></tr>';
+      }).join('') + '</tbody></table>' +
       '<h3>Farm plan — six steps</h3>' +
       '<ol class="steps">' + r.farm_steps.map(function (s) {
         var p = splitStep(s);
