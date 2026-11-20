@@ -35,6 +35,9 @@
   $('asOf').textContent = R.as_of;
   document.querySelector('#tabBoard').textContent = 'Ranked board (' + rows.length + ')';
   document.querySelector('#tabLive').textContent = 'Already trading (' + live.length + ')';
+  var catCount = {};
+  rows.forEach(function (r) { catCount[r.category || 'Uncategorised'] = 1; });
+  document.querySelector('#tabCat').textContent = 'By category (' + Object.keys(catCount).length + ')';
 
   // ---- calibration: the live cross-section, and the chart that plots it ----
   function renderCalibration() {
@@ -156,6 +159,17 @@
       ', maturity &times;' + r.maturity_multiplier + ' and breadth &times;' + r.breadth_multiplier +
       ' — an implied value of ' + money(r.implied_value_usd) + '.';
     var chainList = (r.chains || []).slice(0, 4).join(', ') + ((r.chains || []).length > 4 ? ' +' + ((r.chains || []).length - 4) + ' more' : '');
+    var ratio = r.implied_value_usd / r.tvl_usd;
+    var marketMed = R.calibration ? R.calibration.median_mcap_per_tvl : null;
+    var ctx = '<strong>Against the whole market.</strong> This implied value is ' + ratio.toFixed(3) + '&times; TVL — higher than ' + r.implied_percentile + '% of the ' + (R.calibration ? R.calibration.live_count : 0) + ' live tokens.';
+    if (r.category_median_mcap_per_tvl != null) {
+      ctx += ' The median live token in ' + esc(r.category || 'this category') + ' trades at ' + r.category_median_mcap_per_tvl + '&times; TVL, so the implied value sits ' + (ratio >= r.category_median_mcap_per_tvl ? 'above' : 'below') + ' its own category&rsquo;s middle.';
+      if (marketMed != null) ctx += ' That category median is itself ' + (r.category_median_mcap_per_tvl < marketMed ? 'below' : 'above') + ' the whole market&rsquo;s median of ' + marketMed + '&times; — a category&rsquo;s live tokens can trade structurally low, so sitting above the three comparables is not, on its own, a sign of overpricing.';
+    } else if (r.category_single_peer) {
+      ctx += ' Only one live token trades in this category — ' + esc(r.category_single_peer.name) + ' at ' + r.category_single_peer.mcap_per_tvl + '&times; TVL — so there is no category median to compare against.';
+    } else {
+      ctx += ' No live token trades in this category, so there is no category median to compare against.';
+    }
     box.innerHTML =
       '<button class="close" type="button" id="closeDetail">Close &times;</button>' +
       '<h2>' + esc(r.name) + ' <span class="slug">#' + r.rank + ' &middot; ' + esc(r.slug) + '</span></h2>' +
@@ -187,6 +201,7 @@
           '<td class="num">' + money(c.mcap_usd) + '</td>' +
           '<td class="num">' + c.mcap_per_tvl + '&times;</td></tr>';
       }).join('') + '</tbody></table>' +
+      '<p class="why">' + ctx + '</p>' +
       '<h3>Farm plan — six steps</h3>' +
       '<ol class="steps">' + r.farm_steps.map(function (s) {
         var p = splitStep(s);
@@ -209,16 +224,60 @@
       '<td class="num">' + pct(p.change_7d) + '</td></tr>';
   }).join('');
 
+  // ---- category view: one row per category, by median implied value ----
+  function renderCategories() {
+    var byCat = {};
+    rows.forEach(function (r) {
+      var k = r.category || 'Uncategorised';
+      var g = byCat[k];
+      if (!g) g = byCat[k] = { name: k, count: 0, watch: 0, implied: [], top: null };
+      g.count++;
+      if (r.watchlist) g.watch++;
+      g.implied.push(r.implied_value_usd);
+      if (!g.top || r.implied_value_usd > g.top.implied_value_usd) g.top = r;
+    });
+    function median(a) {
+      var s = a.slice().sort(function (x, y) { return x - y; });
+      var m = Math.floor(s.length / 2);
+      return s.length % 2 === 1 ? s[m] : (s[m - 1] + s[m]) / 2;
+    }
+    var list = Object.keys(byCat).map(function (k) { return byCat[k]; });
+    list.forEach(function (g) { g.med = median(g.implied); });
+    list.sort(function (a, b) { return b.med - a.med || b.count - a.count || (a.name < b.name ? -1 : 1); });
+    $('catRows').innerHTML = list.map(function (g) {
+      return '<tr data-cat="' + esc(g.name) + '">' +
+        '<td><span class="name">' + esc(g.name) + '</span></td>' +
+        '<td class="num">' + g.count + '</td>' +
+        '<td class="num">' + g.watch + '</td>' +
+        '<td class="num">' + money(g.med) + '</td>' +
+        '<td><span class="name">' + esc(g.top.name) + '</span> <span class="slug">#' + g.top.rank + ' &middot; ' + money(g.top.implied_value_usd) + '</span></td>' +
+        '</tr>';
+    }).join('');
+  }
+  renderCategories();
+  $('catRows').addEventListener('click', function (e) {
+    var tr = e.target.closest('tr');
+    if (!tr) return;
+    var cat = tr.getAttribute('data-cat');
+    state.cat = cat === 'Uncategorised' ? '' : cat;
+    $('cat').value = state.cat;
+    setTab('board');
+    render();
+  });
+
   // ---- tabs ----
   function setTab(which) {
     $('tabBoard').classList.toggle('active', which === 'board');
+    $('tabCat').classList.toggle('active', which === 'cat');
     $('tabLive').classList.toggle('active', which === 'live');
     $('boardView').hidden = which !== 'board';
+    $('catView').hidden = which !== 'cat';
     $('liveView').hidden = which !== 'live';
     document.querySelector('.controls').style.display = which === 'board' ? '' : 'none';
     $('detail').hidden = which !== 'board' ? true : $('detail').hidden;
   }
   $('tabBoard').addEventListener('click', function () { setTab('board'); });
+  $('tabCat').addEventListener('click', function () { setTab('cat'); });
   $('tabLive').addEventListener('click', function () { setTab('live'); });
 
   // ---- controls ----

@@ -8,7 +8,7 @@
 </head>
 <body>
 <header class="hero">
-  <p class="eyebrow">Token Launch Radar &middot; model radar-3 &middot; snapshot 2026-11-14</p>
+  <p class="eyebrow">Token Launch Radar &middot; model radar-4 &middot; snapshot 2026-11-14</p>
   <h1>Token Launch Radar</h1>
   <p class="lede">Which protocol's token would be worth the most if it launched tomorrow &mdash; and what to do to farm it first. Every protocol below <strong>records no token</strong> in the snapshot: no market cap, no CoinGecko id, no symbol. That is the record, never proof it has none.</p>
   <div class="stats" id="stats" aria-label="Coverage"></div>
@@ -52,6 +52,7 @@
 
   <nav class="tabs" aria-label="Views">
     <button id="tabBoard" class="tab active" type="button">Ranked board</button>
+    <button id="tabCat" class="tab" type="button">By category</button>
     <button id="tabLive" class="tab" type="button">Already trading</button>
   </nav>
 
@@ -75,6 +76,18 @@
       </table>
     </div>
     <p class="hint">Click any row for its detail view: the model&rsquo;s breakdown and a six-step farm plan with costs and times.</p>
+  </section>
+
+  <section id="catView" hidden aria-label="By category">
+    <p class="count">Each category on the board, by its median implied value. Click a category to filter the board to it.</p>
+    <div class="tablewrap">
+      <table id="cats">
+        <thead><tr>
+          <th>Category</th><th class="num">Protocols</th><th class="num">Watchlist</th><th class="num">Median implied value</th><th>Top protocol</th>
+        </tr></thead>
+        <tbody id="catRows"></tbody>
+      </table>
+    </div>
   </section>
 
   <section id="liveView" hidden aria-label="Already trading">
