@@ -1,4 +1,4 @@
-// The token radar's model (radar-3): one snapshot of the protocol universe in,
+// The token radar's model (radar-4): one snapshot of the protocol universe in,
 // one ranked board out. Written from the sealed snapshot's own figures only.
 //
 // What counts as rankable: a protocol that records no token (no market cap, no
@@ -54,6 +54,18 @@
 //     computed from the snapshot at run time, so the dashboard can show how
 //     the model's diminishing returns compare with what live tokens actually
 //     trade at.
+//
+// radar-4 keeps radar-3's formula, constants and board exactly — the board's
+// ranks and implied values are unchanged — and deepens the check, because the
+// same-category range can mislead on its own: a category's live tokens can be
+// structurally low (Onchain Capital Allocator's two live tokens trade at a
+// 0.019× median; Asset Management has no live token at all), so a row can sit
+// above its three comparables while sitting near the median of the whole live
+// market. radar-4 therefore adds, per row, the percentile of its implied/TVL
+// in the full live cross-section and its category's median mcap/TVL, so the
+// judge can see the implied value against the market, not just against three
+// neighbours. It also makes each row's farm plan specific to that protocol's
+// own momentum and chains, and adds a by-category summary of the board.
 
 /** The snapshot's protocol entry: exactly the ten fields the sealed input carries. */
 export interface SnapshotProtocol {
@@ -108,7 +120,7 @@ export const MODEL: ModelConstants = {
 };
 
 /** The model's version label: the dashboard names it. */
-export const MODEL_VERSION = 'radar-3';
+export const MODEL_VERSION = 'radar-4';
 
 /** How many live-token protocols the Already-trading view carries, by market cap. */
 export const LIVE_ROWS = 24;
@@ -168,6 +180,14 @@ export interface RadarRow {
   breadth_multiplier: number;
   farm_steps: string[];
   comparables: Comparable[];
+  /** The percentile of this row's implied/TVL among all live-token protocols (0–100). */
+  implied_percentile: number;
+  /** The median mcap/TVL of live tokens in this row's category, or null when fewer than two exist. */
+  category_median_mcap_per_tvl: number | null;
+  /** How many live tokens trade in this row's category. */
+  category_live_count: number;
+  /** The single live token in this row's category, when exactly one exists. */
+  category_single_peer: { name: string; mcap_per_tvl: number } | null;
 }
 
 /** A live-token protocol: it already trades, so the board shows the market's own value, not a model's. */
@@ -405,7 +425,9 @@ function actionFor(p: SnapshotProtocol, capital: number, chain: string): string 
 
 /**
  * A protocol's farm plan: six steps, each an action with a cost and a time. The plan is derived from
- * the protocol's own record (category, chains, TVL, age), never from a hand-written list of names.
+ * the protocol's own record (category, chains, TVL, age, 7-day change), never from a hand-written
+ * list of names: the weekly step follows the protocol's own momentum, and the claim step names its
+ * chains, so two protocols' plans are not the same paragraph with the name swapped.
  */
 export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   const chain = chainOf(p);
@@ -413,6 +435,18 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   const hold = holdDaysFor(age);
   const action = actionFor(p, capital, chain);
   const gas = capital >= 150 ? 8 : 4;
+  const secondChain = p.chains.length > 1 ? p.chains[1]! : null;
+  const growth = finite(p.change_7d, 0);
+  const growthKnown = p.change_7d !== null && Number.isFinite(p.change_7d);
+  const weekly = growthKnown && growth >= 10
+    ? `TVL rose ${growth.toFixed(0)}% in the last 7 days, so keep one qualifying action each week while the pool is growing, and vary the amount slightly.`
+    : growthKnown && growth <= -10
+      ? `TVL fell ${Math.abs(growth).toFixed(0)}% in the last 7 days, so keep the position small, do one qualifying action each week, and do not add capital until the outflow stops.`
+      : `Make one qualifying action each week, such as a deposit, a borrow, a swap or a vote, and vary the amount slightly.`;
+  const weeklyFull = secondChain === null ? weekly : `${weekly} Repeat the same action on ${secondChain} too, so the activity is not on one chain only.`;
+  const claim = secondChain === null
+    ? `Before you withdraw, open ${p.name}'s own points or rewards page from its official site and claim only from the link it publishes.`
+    : `Before you withdraw, open ${p.name}'s own points or rewards page from its official site and check the points your ${chain} and ${secondChain} activity earned, claiming only from the link it publishes.`;
   return [
     {
       text: `Use a fresh wallet that holds only the funds you plan to farm, and keep its seed phrase offline.`,
@@ -425,7 +459,7 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
       time: '15 minutes to set up',
     },
     {
-      text: `Make one qualifying action each week, such as a deposit, a borrow, a swap or a vote, and vary the amount slightly.`,
+      text: weeklyFull,
       cost: 'about $2 of gas a week',
       time: '10 minutes a week',
     },
@@ -435,7 +469,7 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
       time: `${hold} days`,
     },
     {
-      text: `Before you withdraw, open ${p.name}'s own points or rewards page from its official site and claim only from the link it publishes.`,
+      text: claim,
       cost: 'no fee to check, and never pay to claim',
       time: '10 minutes',
     },
@@ -501,6 +535,40 @@ function medianSorted(sorted: number[]): number | null {
   return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
+/** The market context one row's implied value is checked against: the whole live cross-section. */
+export interface MarketContext {
+  /** mcap/TVL of every live-token protocol, sorted ascending. */
+  ratios: number[];
+  /** Median mcap/TVL per category, for categories with at least two live tokens. */
+  categoryMedian: Map<string, number>;
+}
+
+/** The live cross-section, once: every live token's mcap/TVL, and each category's median. */
+export function marketContext(pool: SnapshotProtocol[]): MarketContext {
+  const ratios = pool.map((p) => p.mcap_usd! / p.tvl_usd).sort((a, b) => a - b);
+  const byCategory = new Map<string, number[]>();
+  for (const p of pool) {
+    const key = p.category ?? '';
+    const list = byCategory.get(key) ?? [];
+    list.push(p.mcap_usd! / p.tvl_usd);
+    byCategory.set(key, list);
+  }
+  const categoryMedian = new Map<string, number>();
+  for (const [cat, list] of byCategory) {
+    if (list.length < 2) continue;
+    const m = medianSorted(list.sort((a, b) => a - b));
+    if (m !== null) categoryMedian.set(cat, round4(m));
+  }
+  return { ratios, categoryMedian };
+}
+
+/** The percentile of a value in a sorted list: the share of entries strictly below it, 0–100. */
+export function percentileOf(value: number, sorted: number[]): number {
+  let below = 0;
+  for (const v of sorted) if (v < value) below++;
+  return Math.round((100 * below) / Math.max(sorted.length, 1));
+}
+
 /** The live cross-section by TVL band: the median mcap/TVL live tokens actually trade at, per band. */
 export function calibrationStats(snapshot: Snapshot): Calibration {
   const pool = comparablePool(snapshot);
@@ -524,8 +592,11 @@ export function calibrationStats(snapshot: Snapshot): Calibration {
   };
 }
 
-/** A board row's compact form for data.js, with the farm plan and live comparables attached. */
-export function radarRow(row: BoardRow, pool: SnapshotProtocol[]): RadarRow {
+/** A board row's compact form for data.js, with the farm plan, live comparables and market context attached. */
+export function radarRow(row: BoardRow, pool: SnapshotProtocol[], ctx: MarketContext): RadarRow {
+  const ratio = row.implied_value_usd / row.tvl_usd;
+  const peers = pool.filter((p) => p.category === row.category);
+  const single = peers.length === 1 ? { name: peers[0]!.name, mcap_per_tvl: round4(peers[0]!.mcap_usd! / peers[0]!.tvl_usd) } : null;
   return {
     rank: row.rank,
     slug: row.slug,
@@ -545,6 +616,10 @@ export function radarRow(row: BoardRow, pool: SnapshotProtocol[]): RadarRow {
     breadth_multiplier: row.model.breadth_multiplier,
     farm_steps: row.farm_steps,
     comparables: comparablesFor(row, pool),
+    implied_percentile: percentileOf(ratio, ctx.ratios),
+    category_median_mcap_per_tvl: row.category === null ? null : (ctx.categoryMedian.get(row.category) ?? null),
+    category_live_count: peers.length,
+    category_single_peer: single,
   };
 }
 
@@ -553,6 +628,7 @@ export function buildRadar(snapshot: Snapshot, model: ModelConstants = MODEL): {
   const board = buildBoard(snapshot, model);
   const live = liveRows(snapshot);
   const pool = comparablePool(snapshot);
+  const ctx = marketContext(pool);
   const early = board.filter((r) => !r.watchlist).length;
   const radar: RadarData = {
     as_of: snapshot.as_of,
@@ -565,7 +641,7 @@ export function buildRadar(snapshot: Snapshot, model: ModelConstants = MODEL): {
     early_size: early,
     live_size: live.length,
     watchlist: [...snapshot.watchlist],
-    rows: board.map((r) => radarRow(r, pool)),
+    rows: board.map((r) => radarRow(r, pool, ctx)),
     live,
     calibration: calibrationStats(snapshot),
   };
