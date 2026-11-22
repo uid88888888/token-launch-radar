@@ -59,6 +59,20 @@
   }
   renderRisks();
 
+  // ---- highlights: the board in one minute, computed from the snapshot at run time ----
+  function renderHighlights() {
+    var h = R.highlights;
+    if (!h) return;
+    var earlyShare = (100 - h.watchlist_implied_share_pct).toFixed(1);
+    $('highlightList').innerHTML =
+      '<li><strong>' + money(h.total_implied_value_usd) + ' of implied value.</strong> The board&rsquo;s ' + rows.length + ' protocols imply ' + money(h.total_implied_value_usd) + ' of launch value between them; the ' + R.watchlist_size + ' watchlist protocols hold ' + h.watchlist_implied_share_pct + '% of it, the ' + R.early_size + ' early finds the other ' + earlyShare + '%.</li>' +
+      '<li><strong>The best early find is #' + h.top_early.rank + '.</strong> ' + esc(h.top_early.name) + ' implies ' + money(h.top_early.implied_value_usd) + ' and sits below the watchlist floor — finding rows like it is what the radar is for.</li>' +
+      '<li><strong>Fastest-growing watchlist protocol: ' + esc(h.fastest_watchlist.name) + '.</strong> Up ' + h.fastest_watchlist.change_7d.toFixed(1) + '% in 7 days at #' + h.fastest_watchlist.rank + ', implying ' + money(h.fastest_watchlist.implied_value_usd) + '.</li>' +
+      '<li><strong>Widest reach: ' + esc(h.widest_reach.name) + ' on ' + h.widest_reach.chain_count + ' chains.</strong> Breadth stops counting after 4 chains, so its implied value of ' + money(h.widest_reach.implied_value_usd) + ' at #' + h.widest_reach.rank + ' does not follow its chain count.</li>' +
+      '<li><strong>Top-heavy, but not only the top.</strong> The top 10 rows hold ' + h.top10_implied_share_pct + '% of the board&rsquo;s implied value; the median row is worth ' + money(h.median_implied_value_usd) + '.</li>';
+  }
+  renderHighlights();
+
   // ---- calibration: the live cross-section, and the chart that plots it ----
   function renderCalibration() {
     var c = R.calibration;
@@ -211,6 +225,9 @@
       ctx += ' No live token trades in this category, so there is no category median to compare against.';
       ctx += ' With no category median, this row is judged against the whole-market median of ' + r.benchmark_mcap_per_tvl + '&times; TVL instead, and the implied value sits ' + (ratio >= r.benchmark_mcap_per_tvl ? 'above' : 'below') + ' it.';
     }
+    var benchImplied = r.benchmark_implied_value_usd != null ? r.benchmark_implied_value_usd : Math.round(r.benchmark_mcap_per_tvl * r.tvl_usd);
+    var premium = benchImplied > 0 ? Math.round(100 * (r.implied_value_usd - benchImplied) / benchImplied) : 0;
+    ctx += ' At its benchmark of ' + r.benchmark_mcap_per_tvl + '&times; TVL this protocol would be worth ' + money(benchImplied) + '; the model says ' + money(r.implied_value_usd) + ' — ' + Math.abs(premium) + '% ' + (premium >= 0 ? 'above' : 'below') + ' the benchmark, priced on growth and maturity, not on the benchmark.';
     box.innerHTML =
       '<button class="close" type="button" id="closeDetail">Close &times;</button>' +
       '<h2>' + esc(r.name) + ' <span class="slug">#' + r.rank + ' &middot; ' + esc(r.slug) + '</span></h2>' +
@@ -231,7 +248,7 @@
       '<tr class="total"><td>Implied value</td><td>' + money(r.implied_value_usd) + '</td></tr>' +
       '</tbody></table>' +
       '<p class="why">' + why + '</p>' +
-      '<h3>What could be wrong</h3>' + riskHtml(r) +
+      '<h3>What to check</h3>' + riskHtml(r) +
       '<h3>Live comparables</h3>' +
       '<p class="note">The nearest live-token protocols in this category by TVL, with what their tokens actually trade at. The range is wide — it mixes thriving tokens and dead ones — so the implied value is a launch valuation, not a copy of any comparable.</p>' +
       '<table class="comps"><thead><tr><th>Protocol</th><th>Category</th><th class="num">TVL</th><th class="num">Market cap</th><th class="num">Mcap / TVL</th></tr></thead><tbody>' +
