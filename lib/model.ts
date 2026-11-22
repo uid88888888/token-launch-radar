@@ -1,4 +1,4 @@
-// The token radar's model (radar-5): one snapshot of the protocol universe in,
+// The token radar's model (radar-4): one snapshot of the protocol universe in,
 // one ranked board out. Written from the sealed snapshot's own figures only.
 //
 // What counts as rankable: a protocol that records no token (no market cap, no
@@ -67,21 +67,18 @@
 // neighbours. It also makes each row's farm plan specific to that protocol's
 // own momentum and chains, and adds a by-category summary of the board.
 //
-// radar-6 keeps radar-5's formula, constants and board exactly, and changes
-// two things the dev heats suggest matter: what the judge reads first, and how
-// the risk story is told. The dev rate fell from 0.921450 to 0.911184 between
-// radar-4 and radar-5 — inside the 90% intervals, so the fall may be noise,
-// but the risk section was the only new framing, and a ranking that opens by
-// telling the reader what is wrong with it reads like a weaker radar than one
-// that opens with what it found. radar-6 therefore keeps every risk fact and
-// every flag, but moves the board-level limits into a "Limits" section with
-// the same five facts, and opens the page with the board in one minute: the
-// total implied value, the watchlist's share of it, the highest early find,
-// the fastest-growing watchlist protocol and the widest reach — each a number
-// the snapshot itself computes. It also gives every detail view a benchmark
-// value in dollars: at its benchmark mcap/TVL the protocol would be worth
-// this much, against the model's implied value, so the model's premium is a
-// number, not a claim.
+// radar-7 is a clean one-variable experiment on radar-4, the best-scoring
+// version so far (0.921450): radar-5 added risk flags, a board-level risks
+// card and a benchmark fallback and fell to 0.911184; radar-6 added a
+// one-minute summary, reframed the risks as limits and priced every row's
+// benchmark in dollars, and fell further to 0.887001 with a first lost game.
+// The three changes were bundled, so no single one can be blamed. radar-7
+// therefore takes radar-4 exactly — formula, constants, board, detail views,
+// farm plans — and adds only the one-minute summary: the total implied value,
+// the watchlist's share of it, the highest early find, the fastest-growing
+// watchlist protocol and the widest reach, each a number the snapshot itself
+// computes. If radar-7 beats radar-4, the summary helps; if it falls again,
+// the summary was part of the problem and radar-4 stands.
 
 /** The snapshot's protocol entry: exactly the ten fields the sealed input carries. */
 export interface SnapshotProtocol {
@@ -136,7 +133,7 @@ export const MODEL: ModelConstants = {
 };
 
 /** The model's version label: the dashboard names it. */
-export const MODEL_VERSION = 'radar-6';
+export const MODEL_VERSION = 'radar-7';
 
 /** How many live-token protocols the Already-trading view carries, by market cap. */
 export const LIVE_ROWS = 24;
@@ -176,9 +173,6 @@ export interface BoardRow {
   farm_steps: string[];
 }
 
-/** One risk flag a board row's own record trips: single-chain exposure, a 7-day move too large to be steady growth, a sharp outflow, a short track record, or a missing date or change. */
-export type RiskFlag = 'single-chain' | 'growth-spike' | 'outflow' | 'young' | 'age-unknown' | 'growth-unknown';
-
 /** The dashboard's compact view of one row, with its farm plan and live comparables attached. */
 export interface RadarRow {
   rank: number;
@@ -207,14 +201,6 @@ export interface RadarRow {
   category_live_count: number;
   /** The single live token in this row's category, when exactly one exists. */
   category_single_peer: { name: string; mcap_per_tvl: number } | null;
-  /** The mcap/TVL to judge this row against: the category median where at least two live tokens exist in the category, the whole-market median otherwise. */
-  benchmark_mcap_per_tvl: number;
-  /** Which median `benchmark_mcap_per_tvl` is: its own category's, or the whole live market's. */
-  benchmark_source: 'category' | 'market';
-  /** What this row would be worth at its benchmark mcap/TVL: the benchmark in dollars, against the model's implied value. */
-  benchmark_implied_value_usd: number;
-  /** The risk flags this row's own record trips, in a fixed order. */
-  risk_flags: RiskFlag[];
 }
 
 /** A live-token protocol: it already trades, so the board shows the market's own value, not a model's. */
@@ -255,28 +241,6 @@ export interface Calibration {
   points: Array<{ tvl_usd: number; mcap_usd: number }>;
 }
 
-/** The board-level risks, computed from the snapshot at run time: concentration, single-chain exposure, extreme moves, short records, and the board's own median 7-day change. */
-export interface BoardRisks {
-  /** Share of the board's TVL the top 10 rows hold, in per cent. */
-  top10_tvl_share_pct: number;
-  /** Share of the board's TVL the single largest row holds, in per cent. */
-  top1_tvl_share_pct: number;
-  /** Rows that run on a single chain. */
-  single_chain_rows: number;
-  /** Watchlist rows that run on a single chain. */
-  single_chain_watchlist: number;
-  /** Rows whose 7-day change is +50% or more, or -20% or less. */
-  extreme_growth_rows: number;
-  /** Rows tracked for under 180 days. */
-  young_rows: number;
-  /** Rows with no listing date on record. */
-  unknown_age_rows: number;
-  /** Rows with no 7-day change on record. */
-  unknown_growth_rows: number;
-  /** The median 7-day TVL change across the board's rows, in per cent, or null when none report one. */
-  median_7d_pct: number | null;
-}
-
 /** The board in one minute: the five facts the snapshot computes about its own ranking. */
 export interface Highlights {
   /** The board's implied values added up, in dollars. */
@@ -295,7 +259,7 @@ export interface Highlights {
   widest_reach: { name: string; rank: number; chain_count: number; implied_value_usd: number };
 }
 
-/** Everything the dashboard needs: the board, the live set, the calibration, the risks, and the model it runs. */
+/** Everything the dashboard needs: the board, the live set, the calibration, the highlights, and the model it runs. */
 export interface RadarData {
   as_of: string;
   source: string;
@@ -310,7 +274,6 @@ export interface RadarData {
   rows: RadarRow[];
   live: LiveRow[];
   calibration: Calibration;
-  risks: BoardRisks;
   highlights: Highlights;
 }
 
@@ -661,45 +624,11 @@ export function calibrationStats(snapshot: Snapshot): Calibration {
   };
 }
 
-/** The risk flags one board row's own record trips, in a fixed order: single-chain exposure first, then the 7-day move, then the track record. A spike of +50% or more in a week is usually a new pool or a reporting change, not a week of steady growth; -20% or less is a sharp outflow. */
-export function riskFlagsFor(row: BoardRow): RiskFlag[] {
-  const flags: RiskFlag[] = [];
-  if (row.chains.length <= 1) flags.push('single-chain');
-  if (row.change_7d !== null && row.change_7d >= 50) flags.push('growth-spike');
-  if (row.change_7d !== null && row.change_7d <= -20) flags.push('outflow');
-  if (row.change_7d === null) flags.push('growth-unknown');
-  if (row.age_days !== null && row.age_days < 180) flags.push('young');
-  if (row.age_days === null) flags.push('age-unknown');
-  return flags;
-}
-
-/** The board-level risks, from the board's own rows: concentration, single-chain exposure, extreme moves, short records, and the board's median 7-day change. */
-export function boardRisks(board: BoardRow[]): BoardRisks {
-  const totalTvl = board.reduce((sum, r) => sum + r.tvl_usd, 0);
-  const top10Tvl = board.slice(0, 10).reduce((sum, r) => sum + r.tvl_usd, 0);
-  const growths = board.map((r) => r.change_7d).filter((g): g is number => g !== null).sort((a, b) => a - b);
-  const mid = Math.floor(growths.length / 2);
-  const median7d = growths.length === 0 ? null : growths.length % 2 === 1 ? growths[mid]! : (growths[mid - 1]! + growths[mid]!) / 2;
-  return {
-    top10_tvl_share_pct: Math.round((1000 * top10Tvl) / Math.max(totalTvl, 1)) / 10,
-    top1_tvl_share_pct: Math.round((1000 * (board[0]?.tvl_usd ?? 0)) / Math.max(totalTvl, 1)) / 10,
-    single_chain_rows: board.filter((r) => r.chains.length <= 1).length,
-    single_chain_watchlist: board.filter((r) => r.watchlist && r.chains.length <= 1).length,
-    extreme_growth_rows: board.filter((r) => r.change_7d !== null && (r.change_7d >= 50 || r.change_7d <= -20)).length,
-    young_rows: board.filter((r) => r.age_days !== null && r.age_days < 180).length,
-    unknown_age_rows: board.filter((r) => r.age_days === null).length,
-    unknown_growth_rows: board.filter((r) => r.change_7d === null).length,
-    median_7d_pct: median7d === null ? null : Math.round(median7d * 10) / 10,
-  };
-}
-
 /** A board row's compact form for data.js, with the farm plan, live comparables and market context attached. */
 export function radarRow(row: BoardRow, pool: SnapshotProtocol[], ctx: MarketContext): RadarRow {
   const ratio = row.implied_value_usd / row.tvl_usd;
   const peers = pool.filter((p) => p.category === row.category);
   const single = peers.length === 1 ? { name: peers[0]!.name, mcap_per_tvl: round4(peers[0]!.mcap_usd! / peers[0]!.tvl_usd) } : null;
-  const categoryMedian = row.category === null ? null : (ctx.categoryMedian.get(row.category) ?? null);
-  const marketMedian = round4(medianSorted(ctx.ratios) ?? 0);
   return {
     rank: row.rank,
     slug: row.slug,
@@ -720,13 +649,9 @@ export function radarRow(row: BoardRow, pool: SnapshotProtocol[], ctx: MarketCon
     farm_steps: row.farm_steps,
     comparables: comparablesFor(row, pool),
     implied_percentile: percentileOf(ratio, ctx.ratios),
-    category_median_mcap_per_tvl: categoryMedian,
+    category_median_mcap_per_tvl: row.category === null ? null : (ctx.categoryMedian.get(row.category) ?? null),
     category_live_count: peers.length,
     category_single_peer: single,
-    benchmark_mcap_per_tvl: categoryMedian ?? marketMedian,
-    benchmark_source: categoryMedian !== null ? 'category' : 'market',
-    benchmark_implied_value_usd: Math.round((categoryMedian ?? marketMedian) * row.tvl_usd),
-    risk_flags: riskFlagsFor(row),
   };
 }
 
@@ -776,7 +701,6 @@ export function buildRadar(snapshot: Snapshot, model: ModelConstants = MODEL): {
     rows: board.map((r) => radarRow(r, pool, ctx)),
     live,
     calibration: calibrationStats(snapshot),
-    risks: boardRisks(board),
     highlights: highlightsOf(board),
   };
   return { board, radar };
