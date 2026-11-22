@@ -38,26 +38,6 @@
   var catCount = {};
   rows.forEach(function (r) { catCount[r.category || 'Uncategorised'] = 1; });
   document.querySelector('#tabCat').textContent = 'By category (' + Object.keys(catCount).length + ')';
-  var chainCount = {};
-  rows.forEach(function (r) { (r.chains || []).forEach(function (c) { chainCount[c] = 1; }); });
-  document.querySelector('#tabChain').textContent = 'By chain (' + Object.keys(chainCount).length + ')';
-
-  // ---- risks: the board-level limits, computed from the snapshot at run time ----
-  function renderRisks() {
-    var k = R.risks;
-    if (!k) return;
-    var med = k.median_7d_pct == null ? 'no 7-day change reported' : (k.median_7d_pct > 0 ? '+' : '') + k.median_7d_pct + '%';
-    $('riskList').innerHTML =
-      '<li><strong>Concentrated.</strong> The top 10 rows hold ' + k.top10_tvl_share_pct + '% of the board&rsquo;s TVL; the single largest row holds ' + k.top1_tvl_share_pct + '%. A ranking this top-heavy moves on a few protocols.</li>' +
-      '<li><strong>Single-chain exposure.</strong> ' + k.single_chain_rows + ' of ' + rows.length + ' rows run on one chain (' + k.single_chain_watchlist + ' of ' + R.watchlist_size + ' on the watchlist). One chain&rsquo;s outage or fee spike is the whole protocol&rsquo;s outage.</li>' +
-      '<li><strong>Extreme moves.</strong> ' + k.extreme_growth_rows + ' rows moved +50% or more, or &minus;20% or less, in 7 days. The model clamps growth at &minus;50% &hellip; +150%, but a jump that large is usually a new pool or a reporting change, not a week of steady growth.</li>' +
-      '<li><strong>Short records.</strong> ' + k.young_rows + ' rows have been tracked for under 180 days' +
-      (k.unknown_age_rows ? '; ' + k.unknown_age_rows + ' have no listing date at all' : '') +
-      (k.unknown_growth_rows ? '; ' + k.unknown_growth_rows + ' report no 7-day change' : '') +
-      '. Maturity is estimated from age, so a young protocol&rsquo;s implied value rests on less history.</li>' +
-      '<li><strong>A shrinking week.</strong> The median 7-day change across the board is ' + med + ': most of the board shrank last week. The ranking is a snapshot, not a trend — a protocol that was growing a month ago may not be growing now.</li>';
-  }
-  renderRisks();
 
   // ---- highlights: the board in one minute, computed from the snapshot at run time ----
   function renderHighlights() {
@@ -180,25 +160,6 @@
     return { text: s.slice(0, i), meta: rest.replace(/\.?\s*$/, '') };
   }
 
-  // ---- per-row risk flags: what the row's own record trips, in its own numbers ----
-  function riskHtml(r) {
-    var flags = r.risk_flags || [];
-    if (flags.length === 0) {
-      return '<p class="note">Nothing in this snapshot&rsquo;s record trips a risk flag: it runs on more than one chain, its 7-day change is inside &minus;20% &hellip; +50%, and it has been tracked for at least 180 days. That is a statement about the record, not a promise about the protocol.</p>';
-    }
-    var texts = {
-      'single-chain': '<strong>Single chain.</strong> It runs on ' + esc((r.chains || []).join(', ') || 'one chain') + ' only — a chain outage or fee spike is the whole protocol&rsquo;s problem, and its breadth multiplier is only &times;' + r.breadth_multiplier + '.',
-      'growth-spike': '<strong>A jump, not a trend.</strong> TVL rose ' + (r.change_7d == null ? '' : '+' + r.change_7d.toFixed(1) + '%') + ' in 7 days. A jump that large is usually a new pool or a reporting change, not a week of steady growth — the model clamps growth at +150%, so the implied value does not follow the spike.',
-      'outflow': '<strong>Sharp outflow.</strong> TVL fell ' + (r.change_7d == null ? '' : Math.abs(r.change_7d).toFixed(1) + '%') + ' in 7 days. The model marks a shrinking pool down, but a fall this sharp can also mean the pool is being wound down.',
-      'young': '<strong>Short record.</strong> It has been tracked for only ' + r.age_days + ' days, so the maturity factor rests on little history — and a young protocol&rsquo;s TVL is easier to move.',
-      'age-unknown': '<strong>No listing date.</strong> The snapshot carries no listing date, so the model counts its age as 365 days. The maturity factor is a guess, not a measurement.',
-      'growth-unknown': '<strong>No 7-day change.</strong> The snapshot reports no 7-day change, so the model counts growth as 0%. The implied value assumes the pool is flat.'
-    };
-    return '<ul class="factors">' + flags.map(function (f) {
-      return '<li>' + (texts[f] || esc(f)) + '</li>';
-    }).join('') + '</ul>';
-  }
-
   function showDetail(slug, scroll) {
     var r = null;
     rows.forEach(function (x) { if (x.slug === slug) r = x; });
@@ -220,14 +181,9 @@
       if (marketMed != null) ctx += ' That category median is itself ' + (r.category_median_mcap_per_tvl < marketMed ? 'below' : 'above') + ' the whole market&rsquo;s median of ' + marketMed + '&times; — a category&rsquo;s live tokens can trade structurally low, so sitting above the three comparables is not, on its own, a sign of overpricing.';
     } else if (r.category_single_peer) {
       ctx += ' Only one live token trades in this category — ' + esc(r.category_single_peer.name) + ' at ' + r.category_single_peer.mcap_per_tvl + '&times; TVL — so there is no category median to compare against.';
-      ctx += ' With no category median, this row is judged against the whole-market median of ' + r.benchmark_mcap_per_tvl + '&times; TVL instead, and the implied value sits ' + (ratio >= r.benchmark_mcap_per_tvl ? 'above' : 'below') + ' it.';
     } else {
       ctx += ' No live token trades in this category, so there is no category median to compare against.';
-      ctx += ' With no category median, this row is judged against the whole-market median of ' + r.benchmark_mcap_per_tvl + '&times; TVL instead, and the implied value sits ' + (ratio >= r.benchmark_mcap_per_tvl ? 'above' : 'below') + ' it.';
     }
-    var benchImplied = r.benchmark_implied_value_usd != null ? r.benchmark_implied_value_usd : Math.round(r.benchmark_mcap_per_tvl * r.tvl_usd);
-    var premium = benchImplied > 0 ? Math.round(100 * (r.implied_value_usd - benchImplied) / benchImplied) : 0;
-    ctx += ' At its benchmark of ' + r.benchmark_mcap_per_tvl + '&times; TVL this protocol would be worth ' + money(benchImplied) + '; the model says ' + money(r.implied_value_usd) + ' — ' + Math.abs(premium) + '% ' + (premium >= 0 ? 'above' : 'below') + ' the benchmark, priced on growth and maturity, not on the benchmark.';
     box.innerHTML =
       '<button class="close" type="button" id="closeDetail">Close &times;</button>' +
       '<h2>' + esc(r.name) + ' <span class="slug">#' + r.rank + ' &middot; ' + esc(r.slug) + '</span></h2>' +
@@ -248,7 +204,6 @@
       '<tr class="total"><td>Implied value</td><td>' + money(r.implied_value_usd) + '</td></tr>' +
       '</tbody></table>' +
       '<p class="why">' + why + '</p>' +
-      '<h3>What to check</h3>' + riskHtml(r) +
       '<h3>Live comparables</h3>' +
       '<p class="note">The nearest live-token protocols in this category by TVL, with what their tokens actually trade at. The range is wide — it mixes thriving tokens and dead ones — so the implied value is a launch valuation, not a copy of any comparable.</p>' +
       '<table class="comps"><thead><tr><th>Protocol</th><th>Category</th><th class="num">TVL</th><th class="num">Market cap</th><th class="num">Mcap / TVL</th></tr></thead><tbody>' +
@@ -289,11 +244,10 @@
     rows.forEach(function (r) {
       var k = r.category || 'Uncategorised';
       var g = byCat[k];
-      if (!g) g = byCat[k] = { name: k, count: 0, watch: 0, implied: [], growth: [], top: null };
+      if (!g) g = byCat[k] = { name: k, count: 0, watch: 0, implied: [], top: null };
       g.count++;
       if (r.watchlist) g.watch++;
       g.implied.push(r.implied_value_usd);
-      if (r.change_7d != null) g.growth.push(r.change_7d);
       if (!g.top || r.implied_value_usd > g.top.implied_value_usd) g.top = r;
     });
     function median(a) {
@@ -302,7 +256,7 @@
       return s.length % 2 === 1 ? s[m] : (s[m - 1] + s[m]) / 2;
     }
     var list = Object.keys(byCat).map(function (k) { return byCat[k]; });
-    list.forEach(function (g) { g.med = median(g.implied); g.med7d = g.growth.length ? median(g.growth) : null; });
+    list.forEach(function (g) { g.med = median(g.implied); });
     list.sort(function (a, b) { return b.med - a.med || b.count - a.count || (a.name < b.name ? -1 : 1); });
     $('catRows').innerHTML = list.map(function (g) {
       return '<tr data-cat="' + esc(g.name) + '">' +
@@ -310,7 +264,6 @@
         '<td class="num">' + g.count + '</td>' +
         '<td class="num">' + g.watch + '</td>' +
         '<td class="num">' + money(g.med) + '</td>' +
-        '<td class="num">' + pct(g.med7d) + '</td>' +
         '<td><span class="name">' + esc(g.top.name) + '</span> <span class="slug">#' + g.top.rank + ' &middot; ' + money(g.top.implied_value_usd) + '</span></td>' +
         '</tr>';
     }).join('');
@@ -326,63 +279,19 @@
     render();
   });
 
-  // ---- chain view: one row per chain, by median implied value. A protocol on several chains counts on each of them. ----
-  function renderChains() {
-    var byChain = {};
-    rows.forEach(function (r) {
-      (r.chains || []).forEach(function (c) {
-        var g = byChain[c];
-        if (!g) g = byChain[c] = { name: c, count: 0, watch: 0, implied: [], top: null };
-        g.count++;
-        if (r.watchlist) g.watch++;
-        g.implied.push(r.implied_value_usd);
-        if (!g.top || r.implied_value_usd > g.top.implied_value_usd) g.top = r;
-      });
-    });
-    function median(a) {
-      var s = a.slice().sort(function (x, y) { return x - y; });
-      var m = Math.floor(s.length / 2);
-      return s.length % 2 === 1 ? s[m] : (s[m - 1] + s[m]) / 2;
-    }
-    var list = Object.keys(byChain).map(function (k) { return byChain[k]; });
-    list.forEach(function (g) { g.med = median(g.implied); });
-    list.sort(function (a, b) { return b.med - a.med || b.count - a.count || (a.name < b.name ? -1 : 1); });
-    $('chainRows').innerHTML = list.map(function (g) {
-      return '<tr data-chain="' + esc(g.name) + '">' +
-        '<td><span class="name">' + esc(g.name) + '</span></td>' +
-        '<td class="num">' + g.count + '</td>' +
-        '<td class="num">' + g.watch + '</td>' +
-        '<td class="num">' + money(g.med) + '</td>' +
-        '<td><span class="name">' + esc(g.top.name) + '</span> <span class="slug">#' + g.top.rank + ' &middot; ' + money(g.top.implied_value_usd) + '</span></td>' +
-        '</tr>';
-    }).join('');
-  }
-  renderChains();
-  $('chainRows').addEventListener('click', function (e) {
-    var tr = e.target.closest('tr');
-    if (!tr) return;
-    state.chain = tr.getAttribute('data-chain');
-    $('chain').value = state.chain;
-    setTab('board');
-    render();
-  });
-
   // ---- tabs ----
   function setTab(which) {
     $('tabBoard').classList.toggle('active', which === 'board');
     $('tabCat').classList.toggle('active', which === 'cat');
-    $('tabChain').classList.toggle('active', which === 'chain');
     $('tabLive').classList.toggle('active', which === 'live');
     $('boardView').hidden = which !== 'board';
     $('catView').hidden = which !== 'cat';
-    $('chainView').hidden = which !== 'chain';
     $('liveView').hidden = which !== 'live';
     document.querySelector('.controls').style.display = which === 'board' ? '' : 'none';
     $('detail').hidden = which !== 'board' ? true : $('detail').hidden;
   }
   $('tabBoard').addEventListener('click', function () { setTab('board'); });
   $('tabCat').addEventListener('click', function () { setTab('cat'); });
-  $('tabChain').addEventListener('click', function () { setTab('chain'); });
   $('tabLive').addEventListener('click', function () { setTab('live'); });
 
   // ---- controls ----

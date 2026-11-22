@@ -8,7 +8,7 @@
 </head>
 <body>
 <header class="hero">
-  <p class="eyebrow">Token Launch Radar &middot; model radar-6 &middot; snapshot 2026-11-14</p>
+  <p class="eyebrow">Token Launch Radar &middot; model radar-7 &middot; snapshot 2026-11-14</p>
   <h1>Token Launch Radar</h1>
   <p class="lede">Which protocol's token would be worth the most if it launched tomorrow &mdash; and what to do to farm it first. Every protocol below <strong>records no token</strong> in the snapshot: no market cap, no CoinGecko id, no symbol. That is the record, never proof it has none.</p>
   <div class="stats" id="stats" aria-label="Coverage"></div>
@@ -40,12 +40,6 @@
     <table class="bands" id="bands" aria-label="Live market cap per TVL by size band"></table>
   </section>
 
-  <section class="card risks" id="risks">
-    <h2>Limits of this ranking</h2>
-    <p class="note">The ranking&rsquo;s limits are part of the ranking, not an afterthought. Every figure below is computed from the same snapshot, at run time — no judgement added, no number invented. Each protocol&rsquo;s detail view carries the checks its own record trips.</p>
-    <ul class="factors" id="riskList"></ul>
-  </section>
-
   <section class="controls" aria-label="Board controls">
     <label class="ctl search">Search <input id="q" type="search" placeholder="Name or slug&hellip;" autocomplete="off"></label>
     <label class="ctl">Category <select id="cat"><option value="">All categories</option></select></label>
@@ -65,7 +59,6 @@
   <nav class="tabs" aria-label="Views">
     <button id="tabBoard" class="tab active" type="button">Ranked board</button>
     <button id="tabCat" class="tab" type="button">By category</button>
-    <button id="tabChain" class="tab" type="button">By chain</button>
     <button id="tabLive" class="tab" type="button">Already trading</button>
   </nav>
 
@@ -92,25 +85,13 @@
   </section>
 
   <section id="catView" hidden aria-label="By category">
-    <p class="count">Each category on the board, by its median implied value. The median 7-day change is the middle protocol&rsquo;s move in that category — most categories shrank last week. Click a category to filter the board to it.</p>
+    <p class="count">Each category on the board, by its median implied value. Click a category to filter the board to it.</p>
     <div class="tablewrap">
       <table id="cats">
         <thead><tr>
-          <th>Category</th><th class="num">Protocols</th><th class="num">Watchlist</th><th class="num">Median implied value</th><th class="num">Median 7d</th><th>Top protocol</th>
+          <th>Category</th><th class="num">Protocols</th><th class="num">Watchlist</th><th class="num">Median implied value</th><th>Top protocol</th>
         </tr></thead>
         <tbody id="catRows"></tbody>
-      </table>
-    </div>
-  </section>
-
-  <section id="chainView" hidden aria-label="By chain">
-    <p class="count">Each chain the board&rsquo;s protocols run on, by its median implied value. A protocol on several chains counts on each of them, so the counts add up to more than 198. Click a chain to filter the board to it.</p>
-    <div class="tablewrap">
-      <table id="chains">
-        <thead><tr>
-          <th>Chain</th><th class="num">Protocols</th><th class="num">Watchlist</th><th class="num">Median implied value</th><th>Top protocol</th>
-        </tr></thead>
-        <tbody id="chainRows"></tbody>
       </table>
     </div>
   </section>
